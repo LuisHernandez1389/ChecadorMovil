@@ -20,22 +20,67 @@ function Home() {
   const [empleados, setEmpleados] = useState({});
   const [timers, setTimers] = useState({});
   const [currentTime, setCurrentTime] = useState(Date.now());
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
-    // Obtener empleados y timers desde Firebase
     const empleadosRef = ref(db, 'empleados');
-    onValue(empleadosRef, (snapshot) => {
-      const empleadosData = snapshot.val();
-      setEmpleados(empleadosData || {});
-    });
-
-
-
     const timersRef = ref(db, 'timers');
-    onValue(timersRef, (snapshot) => {
-      const timersData = snapshot.val();
+
+    const fetchEmpleados = async () => {
+      try {
+        const empleadosData = await fetch('https://checador-movil-carquin-default-rtdb.firebaseio.com/empleados.json')
+          .then(response => response.json())
+          .catch(error => console.error(error));
+
+        setEmpleados(empleadosData || {});
+        localStorage.setItem('empleados', JSON.stringify(empleadosData || {}));
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    const fetchTimers = async () => {
+      try {
+        const timersData = await fetch('https://checador-movil-carquin-default-rtdb.firebaseio.com/timers.json')
+          .then(response => response.json())
+          .catch(error => console.error(error));
+
+        setTimers(timersData || {});
+        localStorage.setItem('timers', JSON.stringify(timersData || {}));
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    const handleOnline = () => {
+      setIsOnline(true);
+      fetchEmpleados();
+      fetchTimers();
+      onValue(empleadosRef, (snapshot) => {
+        const empleadosData = snapshot.val();
+        setEmpleados(empleadosData || {});
+        localStorage.setItem('empleados', JSON.stringify(empleadosData || {}));
+      });
+
+      onValue(timersRef, (snapshot) => {
+        const timersData = snapshot.val();
+        setTimers(timersData || {});
+        localStorage.setItem('timers', JSON.stringify(timersData || {}));
+      });
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      const empleadosData = JSON.parse(localStorage.getItem('empleados'));
+      const timersData = JSON.parse(localStorage.getItem('timers'));
+      setEmpleados(empleadosData || {});
       setTimers(timersData || {});
-    });
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    handleOnline();
 
     // Actualizar la hora actual cada segundo
     const intervalId = setInterval(() => {
@@ -43,17 +88,11 @@ function Home() {
     }, 1000);
 
     // Limpiar el intervalo al cerrar el componente
-    return () => clearInterval(intervalId);
-  }, []);
-
-  useEffect(() => {
-    fetch('https://checador-movil-carquin-default-rtdb.firebaseio.com/empleados.json')
-      .then((response) => response.json())
-      .then((data) => {
-        caches.open('checador-movil-cache').then((cache) => {
-          cache.put('firebase-data', new Response(JSON.stringify(data)));
-        });
-      });
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
   const startTimer = (key) => {
@@ -94,7 +133,7 @@ function Home() {
   const formatTime = (milliseconds) => {
     const totalSeconds = Math.floor(milliseconds / 1000);
     const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const minutes = Math .floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
 
     return `${hours}h ${minutes}m ${seconds}s`;
