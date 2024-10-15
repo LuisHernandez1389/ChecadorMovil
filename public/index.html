@@ -44,4 +44,15 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js"
   integrity="sha384-0pUGZvbkm6XF6gxjEnlmuGrJXVbNuzT9qBBavbLwCsOGabYfZo0T0to5eqruptLy" crossorigin="anonymous"></script>
 
+  <script>
+    if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js')
+    .then((registration) => {
+      console.log('Service worker registrado con éxito');
+    })
+    .catch((error) => {
+      console.error('Error al registrar el service worker:', error);
+    });
+}
+  </script>
 </html>

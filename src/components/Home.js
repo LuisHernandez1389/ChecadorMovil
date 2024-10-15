@@ -18,69 +18,35 @@ const db = getDatabase(app);
 
 function Home() {
   const [empleados, setEmpleados] = useState({});
+  const [empleadosLS, setEmpleadosLS] = useState({});
   const [timers, setTimers] = useState({});
   const [currentTime, setCurrentTime] = useState(Date.now());
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
     const empleadosRef = ref(db, 'empleados');
     const timersRef = ref(db, 'timers');
 
-    const fetchEmpleados = async () => {
-      try {
-        const empleadosData = await fetch('https://checador-movil-carquin-default-rtdb.firebaseio.com/empleados.json')
-          .then(response => response.json())
-          .catch(error => console.error(error));
-
-        setEmpleados(empleadosData || {});
-        localStorage.setItem('empleados', JSON.stringify(empleadosData || {}));
-      } catch (error) {
-        console.error(error);
-      }
-    };
-
-    const fetchTimers = async () => {
-      try {
-        const timersData = await fetch('https://checador-movil-carquin-default-rtdb.firebaseio.com/timers.json')
-          .then(response => response.json())
-          .catch(error => console.error(error));
-
-        setTimers(timersData || {});
-        localStorage.setItem('timers', JSON.stringify(timersData || {}));
-      } catch (error) {
-        console.error(error);
-      }
-    };
-
-    const handleOnline = () => {
-      setIsOnline(true);
-      fetchEmpleados();
-      fetchTimers();
-      onValue(empleadosRef, (snapshot) => {
-        const empleadosData = snapshot.val();
-        setEmpleados(empleadosData || {});
-        localStorage.setItem('empleados', JSON.stringify(empleadosData || {}));
-      });
-
-      onValue(timersRef, (snapshot) => {
-        const timersData = snapshot.val();
-        setTimers(timersData || {});
-        localStorage.setItem('timers', JSON.stringify(timersData || {}));
-      });
-    };
-
-    const handleOffline = () => {
-      setIsOnline(false);
-      const empleadosData = JSON.parse(localStorage.getItem('empleados'));
-      const timersData = JSON.parse(localStorage.getItem('timers'));
+    onValue(empleadosRef, (snapshot) => {
+      const empleadosData = snapshot.val();
       setEmpleados(empleadosData || {});
+      localStorage.setItem('empleados', JSON.stringify(empleadosData || {}));
+    });
+
+    onValue(timersRef, (snapshot) => {
+      const timersData = snapshot.val();
       setTimers(timersData || {});
-    };
+      localStorage.setItem('timers', JSON.stringify(timersData || {}));
+    });
 
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    handleOnline();
+    // Cargar datos de Local Storage al iniciar
+    const empleadosLS = localStorage.getItem('empleados');
+    const timersLS = localStorage.getItem('timers');
+    if (empleadosLS) {
+      setEmpleadosLS(JSON.parse(empleadosLS));
+    }
+    if (timersLS) {
+      setTimers(JSON.parse(timersLS));
+    }
 
     // Actualizar la hora actual cada segundo
     const intervalId = setInterval(() => {
@@ -90,8 +56,6 @@ function Home() {
     // Limpiar el intervalo al cerrar el componente
     return () => {
       clearInterval(intervalId);
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
@@ -141,10 +105,10 @@ function Home() {
 
   return (
     <div>
-      {Object.keys(empleados).length === 0 ? (
+      {Object.keys(empleadosLS).length === 0 ? (
         <p>No hay empleados para mostrar.</p>
       ) : (
-        Object.keys(empleados).map((key) => {
+        Object.keys(empleadosLS).map((key) => {
           const timer = timers[key];
           let elapsed = 0;
           let extra = null;
@@ -160,15 +124,15 @@ function Home() {
               <div className="card">
                 <div className="card-body">
                   <div className="card-title">
-                    {empleados[key]?.nombre} {empleados[key]?.apellido}
+                    {empleadosLS[key]?.nombre} {empleadosLS[key]?.apellido}
                   </div>
                   <div className="card">
                     <div className="card-body">
                       {elapsed > 0 && (
                         <div>
-                          <p>Tiempo transcurrido: {formatTime(elapsed)}</p>
+                          <p>Tiempo transcurrido: { formatTime(elapsed)}</p>
                           {extra && (
-                            <p>Tiempo extra: {formatTime(extra)}</p>
+                            <p>Tiempo extra: { formatTime(extra)}</p>
                           )}
                         </div>
                       )}
@@ -178,7 +142,7 @@ function Home() {
                     <button className='btn btn-primary w-50' onClick={() => startTimer(key)}>Iniciar Contador</button>
                     <button className='btn btn-warning w-50' onClick={() => resetTimer(key)}>Reiniciar Contador</button>
                   </div>
-                </div>
+                </div >
               </div>
             </div>
           );

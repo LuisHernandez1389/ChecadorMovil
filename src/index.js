@@ -10,12 +10,4 @@ root.render(
   </React.StrictMode>
 );
 // Registra el service worker
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js')
-    .then((registration) => {
-      console.log('Service worker registrado con éxito');
-    })
-    .catch((error) => {
-      console.error('Error al registrar el service worker:', error);
-    });
-}
+
