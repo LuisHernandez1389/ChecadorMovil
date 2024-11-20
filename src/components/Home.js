@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, onValue, set } from 'firebase/database';
+import { getDatabase, ref, onValue, set, push } from 'firebase/database';
 
 // Configuración de Firebase
 const firebaseConfig = {
@@ -18,7 +18,6 @@ const db = getDatabase(app);
 
 function Home() {
   const [empleados, setEmpleados] = useState({});
-  const [empleadosLS, setEmpleadosLS] = useState({});
   const [timers, setTimers] = useState({});
   const [currentTime, setCurrentTime] = useState(Date.now());
 
@@ -26,123 +25,125 @@ function Home() {
     const empleadosRef = ref(db, 'empleados');
     const timersRef = ref(db, 'timers');
 
+    // Cargamos los empleados desde Firebase
     onValue(empleadosRef, (snapshot) => {
-      const empleadosData = snapshot.val();
-      setEmpleados(empleadosData || {});
-      localStorage.setItem('empleados', JSON.stringify(empleadosData || {}));
+      const empleadosData = snapshot.val() || {};
+      setEmpleados(empleadosData);
+      localStorage.setItem('empleados', JSON.stringify(empleadosData));
     });
 
+    // Cargamos los timers desde Firebase y actualizamos el estado
     onValue(timersRef, (snapshot) => {
-      const timersData = snapshot.val();
-      setTimers(timersData || {});
-      localStorage.setItem('timers', JSON.stringify(timersData || {}));
+      const timersData = snapshot.val() || {};
+      setTimers(timersData);
+
+      localStorage.setItem('timers', JSON.stringify(timersData));
     });
 
-    // Cargar datos de Local Storage al iniciar
-    const empleadosLS = localStorage.getItem('empleados');
-    const timersLS = localStorage.getItem('timers');
-    if (empleadosLS) {
-      setEmpleadosLS(JSON.parse(empleadosLS));
-    }
-    if (timersLS) {
-      setTimers(JSON.parse(timersLS));
-    }
+    // Actualizamos el tiempo actual cada segundo
+    const intervalId = setInterval(() => setCurrentTime(Date.now()), 1000);
 
-    // Actualizar la hora actual cada segundo
-    const intervalId = setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 1000);
-
-    // Limpiar el intervalo al cerrar el componente
-    return () => {
-      clearInterval(intervalId);
-    };
+    return () => clearInterval(intervalId);
   }, []);
 
-  const startTimer = (key) => {
-    const timerData = {
-      startTime: Date.now(),
-      timerDuration: 30 * 60 * 1000, // 30 minutos en milisegundos
-      extraTime: null,
-    };
-    set(ref(db, `timers/${key}`), timerData);
-  };
-
-  const resetTimer = (key) => {
-    set(ref(db, `timers/${key}`), null);
-  };
-
-  const getElapsedTime = (startTime, duration) => {
-    if (!startTime || startTime > currentTime) {
-      return {
-        elapsed: 0,
-        extra: null,
-      };
-    }
-
-    const elapsedTime = currentTime - startTime;
-
-    if (elapsedTime > duration) {
-      return {
-        elapsed: duration,
-        extra: elapsedTime - duration,
-      };
-    }
-    return {
-      elapsed: elapsedTime,
-      extra: null,
-    };
-  };
+  const getDayOfWeek = (date) => ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][date.getDay()];
 
   const formatTime = (milliseconds) => {
     const totalSeconds = Math.floor(milliseconds / 1000);
     const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math .floor((totalSeconds % 3600) / 60);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
-
     return `${hours}h ${minutes}m ${seconds}s`;
   };
 
+  const getElapsedTime = (startTime, duration) => {
+    if (!startTime || startTime > currentTime) return { elapsed: 0, extra: null };
+    const elapsedTime = currentTime - startTime;
+    return elapsedTime > duration
+      ? { elapsed: duration, extra: elapsedTime - duration }
+      : { elapsed: elapsedTime, extra: null };
+  };
+
+  // Función para iniciar el temporizador
+  const startTimer = (key) => {
+    const now = new Date();
+    const timerData = {
+      startTime: now.getTime(), // Tiempo de inicio
+      timerDuration: 30 * 60 * 1000, // 30 minutos
+      startDay: getDayOfWeek(now), // Día de inicio
+      extraTime: null,
+      isActive: true, // Temporizador activo
+    };
+
+    // Guardar el estado del temporizador en Firebase
+    set(ref(db, `timers/${key}`), timerData);
+
+    // Actualizar el temporizador en local
+    setTimers((prevState) => ({
+      ...prevState,
+      [key]: timerData,
+    }));
+  };
+
+// Función para reiniciar el temporizador y guardar el registro
+const resetTimer = (key) => {
+  const timer = timers[key];
+  const { elapsed, extra } = timer ? getElapsedTime(timer.startTime, timer.timerDuration) : { elapsed: 0, extra: null };
+
+  if (timer && elapsed > 0) {
+    // Guardar el tiempo transcurrido en Firebase antes de reiniciar
+    const registroRef = push(ref(db, `empleados/${key}/registros`));
+    set(registroRef, {
+      fechaInicio: new Date(timer.startTime).toLocaleString(),
+      fechaFin: new Date().toLocaleString(),
+      diaInicio: timer.startDay,
+      tiempoFinal: formatTime(elapsed),
+      tiempoExtra: extra ? formatTime(extra) : '0s', // Aseguramos que solo se guarde si hay tiempo extra
+    });
+  }
+
+  // Reiniciar el temporizador (borrar en Firebase)
+  set(ref(db, `timers/${key}`), null);
+
+  // Limpiar el temporizador en local
+  setTimers((prevState) => ({ ...prevState, [key]: null }));
+};
+
+
   return (
     <div>
-      {Object.keys(empleadosLS).length === 0 ? (
+      {Object.keys(empleados).length === 0 ? (
         <p>No hay empleados para mostrar.</p>
       ) : (
-        Object.keys(empleadosLS).map((key) => {
+        Object.keys(empleados).map((key) => {
           const timer = timers[key];
-          let elapsed = 0;
-          let extra = null;
-
-          if (timer) {
-            const { elapsed: elapsedTime, extra: extraTime } = getElapsedTime(timer.startTime, timer.timerDuration);
-            elapsed = elapsedTime;
-            extra = extraTime;
-          }
+          const { elapsed, extra } = timer ? getElapsedTime(timer.startTime, timer.timerDuration) : { elapsed: 0, extra: null };
 
           return (
             <div key={key} className="col-md-4">
               <div className="card">
                 <div className="card-body">
                   <div className="card-title">
-                    {empleadosLS[key]?.nombre} {empleadosLS[key]?.apellido}
+                    {empleados[key]?.nombre} {empleados[key]?.apellido}
                   </div>
                   <div className="card">
                     <div className="card-body">
                       {elapsed > 0 && (
                         <div>
-                          <p>Tiempo transcurrido: { formatTime(elapsed)}</p>
-                          {extra && (
-                            <p>Tiempo extra: { formatTime(extra)}</p>
-                          )}
+                          <p>Iniciado el: {timer?.startDay}</p>
+                          <p>Tiempo transcurrido: {formatTime(elapsed)}</p>
+                          {extra && <p>Tiempo extra: {formatTime(extra)}</p>}
                         </div>
                       )}
                     </div>
                   </div>
                   <div className="d-flex justify-content-between">
-                    <button className='btn btn-primary w-50' onClick={() => startTimer(key)}>Iniciar Contador</button>
-                    <button className='btn btn-warning w-50' onClick={() => resetTimer(key)}>Reiniciar Contador</button>
+                    <button className='btn btn-primary w-50' onClick={() => startTimer(key)}>
+                      {timer?.isActive ? 'Contador en marcha' : 'Iniciar Contador'}
+                    </button>
+                    <button className='btn btn-danger w-50' onClick={() => resetTimer(key)}>Reiniciar Contador</button>
                   </div>
-                </div >
+                </div>
               </div>
             </div>
           );
